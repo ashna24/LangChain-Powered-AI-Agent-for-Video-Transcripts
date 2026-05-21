@@ -64,7 +64,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Initialize Session State Variables to hold App Memory
 if "qa_chain" not in st.session_state:
     st.session_state.qa_chain = None
 if "chat_history" not in st.session_state:
@@ -78,7 +77,6 @@ with st.sidebar:
 
     uploaded_file = st.file_uploader("Upload Pitch Deck (PDF)", type=["pdf"])
 
-# MAIN LOGIC
 if uploaded_file:
     if st.session_state.qa_chain is None:
         data = None
@@ -86,7 +84,6 @@ if uploaded_file:
     
     with st.status("Analyzing...", expanded=True) as status:
         try:     
-            # STEP 1: Attempt to load the PDF using PyPDFLoader
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                 tmp_file.write(uploaded_file.getvalue())
                 tmp_file_path = tmp_file.name
@@ -94,7 +91,7 @@ if uploaded_file:
             loader = PyPDFLoader(tmp_file_path)
             data = loader.load()
             
-            # Clean up the temporary file
+            # Cleaning up the temporary file
             os.remove(tmp_file_path)
 
         except Exception as e:
@@ -102,8 +99,6 @@ if uploaded_file:
             st.error(f"could not read the file. details: {str(e)}")
             st.stop()
             
-
-    # STEP 3: Proceed with the RAG Pipeline (Works for both auto and manual data)
     if data:
         # Chunking 
         textSplitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
@@ -116,7 +111,7 @@ if uploaded_file:
         # Set up Retriever & Retrieval Chain
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            temperature=0.3, # Low temperature keeps it analytical and grounded in your data
+            temperature=0.3, 
             system_instruction="""You are an elite Venture Capitalist and startup auditor. 
             Your job is to thoroughly analyze the provided pitch deck context and evaluate user questions. 
             Be realistic, highly analytical, and critical. Highlight operational risks, market size (TAM) discrepancies, 
@@ -127,7 +122,6 @@ if uploaded_file:
         st.session_state.qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vector_db.as_retriever())
         status.update(label="Analysis Complete!", state="complete", expanded=False)
 if st.session_state.qa_chain is not None:
-    # Optional: Adds sample queries to help guide your LinkedIn recording demo!
     st.markdown("💡 **Suggested Audit Queries:**")
     st.code("What are the primary execution risks highlighted in this business plan?")
     st.code("Analyze their revenue strategy. Are there any scaling bottlenecks?")
@@ -135,12 +129,11 @@ if st.session_state.qa_chain is not None:
     
     st.subheader("💬 Audit Console")
 
-    # Redisplay existing messages in historical logs
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    #capture new message
+    #capturing new message
     user_query = st.chat_input("Ask a question about business viability, financials, or market size...")
 
     if user_query:
@@ -153,7 +146,6 @@ if st.session_state.qa_chain is not None:
             with st.spinner("Auditing documentation..."):
                 response = st.session_state.qa_chain.invoke({"query": user_query})
 
-                # FIX: Escape the dollar signs so Streamlit doesn't render it as math
                 safe_response = response["result"].replace("$", "\\$")
                     
                 st.write(safe_response)
