@@ -1,6 +1,10 @@
-# PitchDeck Auditor AI
+# Auditor AI
 
-An enterprise-grade Retrieval-Augmented Generation (RAG) application that acts as an elite Venture Capitalist to analyze and audit startup pitch decks. 
+This project is an AI tool that acts like a strict startup investor.
+# How it works:
+- You upload a startup's business plan (a PDF pitch deck).
+- The AI quickly reads and memorizes the entire document.
+- You can then chat with the AI and ask it to find red flags. Instead of just summarizing the text, the AI actively hunts for unrealistic financial goals, missing market research, and weak business logic.
 
 By utilizing Google's Gemini 2.5 Flash and ChromaDB, this system ingests business proposals (PDFs) and provides hyper-analytical, grounded feedback on market viability, execution risks, and financial logic.
 
@@ -16,9 +20,26 @@ By utilizing Google's Gemini 2.5 Flash and ChromaDB, this system ingests busines
 * **Low-Temperature Execution:** Configured for high-fidelity, deterministic responses to prevent hallucination during financial analysis.
 * **Optimized State Management:** Utilizes Streamlit's "st.session_state" to cache the vector database and LLM chain, preventing redundant API calls and ensuring instant conversational responses.
 
-##  Installation & Usage
+## Installation & Usage
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/ashna24/LangChain-Powered-AI-Agent-for-Video-Transcripts.git](https://github.com/ashna24/LangChain-Powered-AI-Agent-for-Video-Transcripts.git)
-   cd LangChain-Powered-AI-Agent-for-Video-Transcripts
+   git clone [https://github.com/ashna24/LangChain-Powered-Startup-Auditor.git](https://github.com/ashna24/LangChain-Powered-Startup-Auditor.git)
+   cd LangChain-Powered-Startup-Auditor
+
+2. **Install dependencies:**
+   ```bash
+   pip install streamlit langchain langchain-google-genai langchain-community chromadb pypdf python-dotenv
+   ```
+
+3. **Set up Environment Variables:**
+   Create a `.env` file in the root directory and add your Google Gemini API Key:
+   ```text
+   GOOGLE_API_KEY=your_api_key_here
+   ```
+   *(Note: Ensure your `.env` file is added to your `.gitignore` to keep your credentials secure.)*
+
+4. **Run the Application:**
+   ```bash
+   streamlit run app.py
+   ```
