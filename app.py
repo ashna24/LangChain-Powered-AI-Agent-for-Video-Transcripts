@@ -1,14 +1,9 @@
 import sys
-try:
-    import pytubefix
-    sys.modules["pytube"] = pytubefix
-except ImportError:
-    pass
-
 import streamlit as st
 import os
 from dotenv import load_dotenv
-from langchain_community.document_loaders import YoutubeLoader
+import tempfile
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import Chroma
@@ -17,12 +12,10 @@ from langchain_core.documents import Document
 
 load_dotenv()
 
-st.set_page_config(page_title="YT Research Assistant", page_icon="🤖", layout="wide")
-st.title("YouTube Assistant!")
+st.set_page_config(page_title="PitchDeck Auditor AI", page_icon="💼", layout="wide")
+st.title("PitchDeck Auditor!")
 
-st.caption("Chat with any video to extract insights and summaries.")
-
-url = st.text_input("Enter YouTube video URL here:", placeholder="https://youtube.com/...")
+st.caption("Upload a startup pitch deck or business proposal to audit its market viability, financial logic, and risks.")
 
 st.markdown("""
     <style>
@@ -70,42 +63,45 @@ st.markdown("""
     footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
+
+# Initialize Session State Variables to hold App Memory
+if "qa_chain" not in st.session_state:
+    st.session_state.qa_chain = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
     
 with st.sidebar:
-    st.title("Welcome to the YouTube Assistant!")
+    st.title("Auditor Dashboard")
     st.markdown("---")
     
-    st.info("This Youtube assistant uses Gemini 2.5 Flash to analyze video transcripts.")
+    st.info("This system  analyzes business plans for market risks, revenue gaps, and scaling bottlenecks.")
 
-    st.warning("⚠️ **Important:** Please ensure the YouTube video has closed captions or transcripts enabled. The AI cannot analyze videos without text data.")
+    uploaded_file = st.file_uploader("Upload Pitch Deck (PDF)", type=["pdf"])
 
 # MAIN LOGIC
-if url:
-    data = None
+if uploaded_file:
+    if st.session_state.qa_chain is None:
+        data = None
+        
     
-    # STEP 1: Try the automated scraper
-    with st.status("Analyzing Video...", expanded=True) as status:
+    with st.status("Analyzing...", expanded=True) as status:
         try:     
-            loader = YoutubeLoader.from_youtube_url(url, add_video_info=False, language=["en", "en-US", "hi", "ur"], translation="en")
+            # STEP 1: Attempt to load the PDF using PyPDFLoader
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_file_path = tmp_file.name
+            
+            loader = PyPDFLoader(tmp_file_path)
             data = loader.load()
-            status.update(label=" Video Processed Automatically!", state="complete", expanded=False)
+            
+            # Clean up the temporary file
+            os.remove(tmp_file_path)
 
         except Exception as e:
-            status.update(label=" YouTube Blocked the Request", state="error", expanded=True)
-            st.warning("YouTube's security system blocked the automatic download. But your AI pipeline is still ready!")
-            
-    # STEP 2: The Fallback UI (If automated scraper fails or returns empty)
-    if not data:
-        st.markdown("---")
-        st.info(" **Manual Override:** Go to the YouTube video, click 'Show Transcript', copy the text, and paste it below.")
-        manual_transcript = st.text_area("Paste the video transcript here:", height=200)
-        
-        if manual_transcript:
-            data = [Document(page_content=manual_transcript)]
-            st.success(" Manual transcript accepted!")
-        else:
-            # Stop the app here and wait for the user to paste the text
+            status.update(label ="Error parsing document", state = "error", expanded=True)
+            st.error(f"could not read the file. details: {str(e)}")
             st.stop()
+            
 
     # STEP 3: Proceed with the RAG Pipeline (Works for both auto and manual data)
     if data:
@@ -118,20 +114,49 @@ if url:
         vector_db = Chroma.from_documents(text, embeddings)
 
         # Set up Retriever & Retrieval Chain
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vector_db.as_retriever())
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.3, # Low temperature keeps it analytical and grounded in your data
+            system_instruction="""You are an elite Venture Capitalist and startup auditor. 
+            Your job is to thoroughly analyze the provided pitch deck context and evaluate user questions. 
+            Be realistic, highly analytical, and critical. Highlight operational risks, market size (TAM) discrepancies, 
+            revenue model flaws, and competition gaps based strictly on the document context provided. 
+            If data is missing from the pitch deck, call it out explicitly as an investment risk."""
+        )
 
-        st.success("Data embedded! Please ask your questions below.")
-        st.markdown("---")
-        
-        st.subheader("💬 Ask a Question")
-        user_query = st.chat_input("What would you like to know about this video?")
+        st.session_state.qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vector_db.as_retriever())
+        status.update(label="Analysis Complete!", state="complete", expanded=False)
+if st.session_state.qa_chain is not None:
+    # Optional: Adds sample queries to help guide your LinkedIn recording demo!
+    st.markdown("💡 **Suggested Audit Queries:**")
+    st.code("What are the primary execution risks highlighted in this business plan?")
+    st.code("Analyze their revenue strategy. Are there any scaling bottlenecks?")
+    st.markdown("---")
+    
+    st.subheader("💬 Audit Console")
 
-        if user_query:
-            with st.chat_message("user"):
-                st.write(user_query)
-                
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    response = qa_chain.invoke({"query": user_query})
-                    st.write(response["result"])
+    # Redisplay existing messages in historical logs
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    #capture new message
+    user_query = st.chat_input("Ask a question about business viability, financials, or market size...")
+
+    if user_query:
+        with st.chat_message("user"):
+            st.write(user_query)
+        st.session_state.chat_history.append({"role": "user", "content": user_query})
+            
+        # Query the cached engine
+        with st.chat_message("assistant"):
+            with st.spinner("Auditing documentation..."):
+                response = st.session_state.qa_chain.invoke({"query": user_query})
+
+                # FIX: Escape the dollar signs so Streamlit doesn't render it as math
+                safe_response = response["result"].replace("$", "\\$")
+                    
+                st.write(safe_response)
+        st.session_state.chat_history.append({"role": "assistant", "content": response["result"]})
+else:
+    st.markdown("<br><br><h3 style='text-align: center; color: #64748b;'>Upload a startup pitch deck in the sidebar to run the automated VC risk assessment.</h3>", unsafe_allow_html=True)
